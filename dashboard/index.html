@@ -916,13 +916,14 @@ async function restartTunnel() {
 let currentTab = 'services';
 
 const yunzaiLog = {
-  preview: { raw: '', first: true, outOffset: 0, errOffset: 0, elId: 'yunzai-log-preview', lines: 120, tailMode: 'out_tail', deltaMode: 'out_delta' },
-  modal: { raw: '', first: true, outOffset: 0, errOffset: 0, elId: 'log-modal-body', lines: 500, tailMode: 'tail', deltaMode: 'delta' },
+  preview: { raw: '', first: true, pm2Offset: 0, outOffset: 0, errOffset: 0, elId: 'yunzai-log-preview', lines: 100, tailMode: 'tail', deltaMode: 'delta' },
+  modal: { raw: '', first: true, pm2Offset: 0, outOffset: 0, errOffset: 0, elId: 'log-modal-body', lines: 100, tailMode: 'tail', deltaMode: 'delta' },
 };
 
 function resetYunzaiLogState(target, lines) {
   target.raw = '';
   target.first = true;
+  target.pm2Offset = 0;
   target.outOffset = 0;
   target.errOffset = 0;
   if (lines) target.lines = Number(lines) || target.lines;
@@ -932,7 +933,7 @@ function yunzaiLogUrl(target, forceTail = false) {
   if (forceTail || target.first) {
     return '/api/yunzai/logs?mode=' + encodeURIComponent(target.tailMode || 'tail') + '&lines=' + encodeURIComponent(target.lines || 100);
   }
-  return '/api/yunzai/logs?mode=' + encodeURIComponent(target.deltaMode || 'delta') + '&out_offset=' + encodeURIComponent(target.outOffset || 0) + '&err_offset=' + encodeURIComponent(target.errOffset || 0);
+  return '/api/yunzai/logs?mode=' + encodeURIComponent(target.deltaMode || 'delta') + '&pm2_offset=' + encodeURIComponent(target.pm2Offset || 0) + '&out_offset=' + encodeURIComponent(target.outOffset || 0) + '&err_offset=' + encodeURIComponent(target.errOffset || 0);
 }
 
 async function fetchYunzaiLog(target, opts = {}) {
@@ -950,6 +951,7 @@ async function fetchYunzaiLog(target, opts = {}) {
     const raw = data.logs || '';
     const outReset = String(data.out_reset || '0') === '1';
     const errReset = String(data.err_reset || '0') === '1';
+    target.pm2Offset = Number(data.pm2_offset || 0);
     target.outOffset = Number(data.out_offset || 0);
     target.errOffset = Number(data.err_offset || 0);
 
@@ -1023,9 +1025,9 @@ async function loadYunzai() {
     html += '<tr><th>连接</th><td class="mono">' + escHtml(data.connections || '-') + '</td></tr>';
     html += '<tr><th>Guoba</th><td><a class="action-btn primary" target="_blank" rel="noopener noreferrer" href="http://' + (window.location.hostname || '127.0.0.1') + ':2536/guoba">打开 Guoba 面板</a><span class="muted">&nbsp;http://' + escHtml(window.location.hostname || '127.0.0.1') + ':2536/guoba</span></td></tr>';
     html += '</tbody></table></div>';
-    html += '<div class="docker-card"><div class="docker-toolbar"><h2>📋 日志预览</h2><span class="docker-summary">仅显示 TRSS-Yunzai out 日志最新输出，随后增量追加</span><button class="action-btn" onclick="refreshYunzaiPreviewLog()">刷新日志</button><button class="action-btn" onclick="openYunzaiLogs()">打开完整日志</button></div><pre class="log-modal-body" id="yunzai-log-preview" style="max-height:360px">加载中...</pre></div>';
+    html += '<div class="docker-card"><div class="docker-toolbar"><h2>📋 日志预览</h2><span class="docker-summary">等价 cd /root/Yunzai && pnpm log 的最近输出，随后增量追加</span><button class="action-btn" onclick="refreshYunzaiPreviewLog()">刷新日志</button><button class="action-btn" onclick="openYunzaiLogs()">打开完整日志</button></div><pre class="log-modal-body" id="yunzai-log-preview" style="max-height:360px">加载中...</pre></div>';
     el.innerHTML = html;
-    resetYunzaiLogState(yunzaiLog.preview, 120);
+    resetYunzaiLogState(yunzaiLog.preview, 100);
     fetchYunzaiLog(yunzaiLog.preview, {forceTail: true});
   } catch (err) {
     el.innerHTML = '<div class="error-state">❌ Yunzai 加载失败: ' + escHtml(err.message) + '</div>';
@@ -1033,7 +1035,7 @@ async function loadYunzai() {
 }
 
 function refreshYunzaiPreviewLog() {
-  resetYunzaiLogState(yunzaiLog.preview, 120);
+  resetYunzaiLogState(yunzaiLog.preview, 100);
   fetchYunzaiLog(yunzaiLog.preview, {forceTail: true});
 }
 

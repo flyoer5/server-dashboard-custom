@@ -491,14 +491,14 @@ sub read_pm2_yunzai_tail {
     $lines =~ s/[^0-9]//g;
     $lines = 100 if $lines !~ /^[0-9]+$/;
     $lines = 2000 if $lines > 2000;
-    my $cmd = 'cd /root/Yunzai && pm2 logs TRSS-Yunzai --lines ' . $lines . ' --nostream --raw 2>&1';
+    my $cmd = 'cd /root/Yunzai && pm2 log --lines ' . $lines . ' --nostream --raw 2>&1';
     my $out = `$cmd`;
     $out //= '';
     return $out;
 }
 
 sub get_yunzai_logs {
-    my ($mode, $lines, $out_off, $err_off) = @_;
+    my ($mode, $lines, $out_off, $err_off, $pm2_off) = @_;
     $mode ||= 'tail';
     $lines ||= 200;
     $lines =~ s/[^0-9]//g;
@@ -506,41 +506,43 @@ sub get_yunzai_logs {
     $lines = 2000 if $lines > 2000;
     $out_off =~ s/[^0-9]//g if defined $out_off;
     $err_off =~ s/[^0-9]//g if defined $err_off;
+    $pm2_off =~ s/[^0-9]//g if defined $pm2_off;
+    my $pm2f = '/root/.pm2/pm2.log';
     my $outf = '/root/.pm2/logs/TRSS-Yunzai-out.log';
     my $errf = '/root/.pm2/logs/TRSS-Yunzai-error.log';
 
+    # Kept for compatibility, but the Yunzai page no longer uses these modes.
     if ($mode eq 'out_tail') {
         my $text = read_file_tail_lines($outf, $lines);
+        my $pm2_size = (-f $pm2f) ? (-s $pm2f) : 0;
         my $out_size = (-f $outf) ? (-s $outf) : 0;
         my $err_size = (-f $errf) ? (-s $errf) : 0;
-        return '{"ok":true,"mode":"out_tail","logs":"' . json_escape($text) . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '"}';
+        return '{"ok":true,"mode":"out_tail","logs":"' . json_escape($text) . '","pm2_offset":"' . $pm2_size . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '"}';
     }
 
     if ($mode eq 'out_delta') {
         my ($out_delta, $out_reset, $out_size) = read_file_delta_from_offset($outf, $out_off || 0);
+        my $pm2_size = (-f $pm2f) ? (-s $pm2f) : 0;
         my $err_size = (-f $errf) ? (-s $errf) : 0;
-        return '{"ok":true,"mode":"out_delta","logs":"' . json_escape($out_delta) . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '","out_reset":"' . $out_reset . '","err_reset":"0"}';
-    }
-
-    if ($mode eq 'follow_init') {
-        my $out_size = (-f $outf) ? (-s $outf) : 0;
-        my $err_size = (-f $errf) ? (-s $errf) : 0;
-        return '{"ok":true,"mode":"follow_init","logs":"","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '"}';
+        return '{"ok":true,"mode":"out_delta","logs":"' . json_escape($out_delta) . '","pm2_offset":"' . $pm2_size . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '","pm2_reset":"0","out_reset":"' . $out_reset . '","err_reset":"0"}';
     }
 
     if ($mode eq 'delta') {
-        my ($out_delta, $out_reset, $out_size) = read_file_delta_from_offset($outf, $out_off || 0);
+        my ($pm2_delta, $pm2_reset, $pm2_size) = read_file_delta_from_offset($pm2f, $pm2_off || 0);
         my ($err_delta, $err_reset, $err_size) = read_file_delta_from_offset($errf, $err_off || 0);
+        my ($out_delta, $out_reset, $out_size) = read_file_delta_from_offset($outf, $out_off || 0);
         my $text = '';
-        $text .= $out_delta if length $out_delta;
+        $text .= $pm2_delta if length $pm2_delta;
         $text .= (length($text) && length($err_delta) ? "\n" : '') . $err_delta if length $err_delta;
-        return '{"ok":true,"mode":"delta","logs":"' . json_escape($text) . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '","out_reset":"' . $out_reset . '","err_reset":"' . $err_reset . '"}';
+        $text .= (length($text) && length($out_delta) ? "\n" : '') . $out_delta if length $out_delta;
+        return '{"ok":true,"mode":"delta","logs":"' . json_escape($text) . '","pm2_offset":"' . $pm2_size . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '","pm2_reset":"' . $pm2_reset . '","out_reset":"' . $out_reset . '","err_reset":"' . $err_reset . '"}';
     }
 
     my $text = read_pm2_yunzai_tail($lines);
+    my $pm2_size = (-f $pm2f) ? (-s $pm2f) : 0;
     my $out_size = (-f $outf) ? (-s $outf) : 0;
     my $err_size = (-f $errf) ? (-s $errf) : 0;
-    return '{"ok":true,"mode":"tail","logs":"' . json_escape($text) . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '"}';
+    return '{"ok":true,"mode":"tail","logs":"' . json_escape($text) . '","pm2_offset":"' . $pm2_size . '","out_offset":"' . $out_size . '","err_offset":"' . $err_size . '"}';
 }
 
 
@@ -761,7 +763,7 @@ sub handle_request {
                 $v =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
                 $q{$k} = $v;
             }
-            my $json = get_yunzai_logs($q{mode} || 'tail', $q{lines} || 200, $q{out_offset} || 0, $q{err_offset} || 0);
+            my $json = get_yunzai_logs($q{mode} || 'tail', $q{lines} || 200, $q{out_offset} || 0, $q{err_offset} || 0, $q{pm2_offset} || 0);
             respond($client, "200 OK", "application/json", $json);
             return;
         }
