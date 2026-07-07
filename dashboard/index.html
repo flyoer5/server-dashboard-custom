@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>控制面板 · 服务与端口</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .header {
+    max-width: 1200px;
+    margin: 0 auto 24px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header h1 .icon { font-size: 32px; }
+  .header .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  .header .stats {
+    display: flex;
+    gap: 20px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+  .stat-badge .num {
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .tabs {
+    max-width: 1200px;
+    margin: 0 auto 16px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .tab-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(88,166,255,0.15);
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .panel.hidden { display: none; }
+  .docker-grid { display: grid; gap: 16px; }
+  .docker-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    overflow-x: auto;
+  }
+  .docker-card h2 { font-size: 18px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+  th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .state-running { color: var(--green); font-weight: 700; }
+  .state-exited, .state-dead { color: var(--red); font-weight: 700; }
+  .action-btn {
+    border: 1px solid var(--border);
+    background: #0d1f3f;
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 2px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .action-btn:hover { border-color: var(--accent); }
+  .muted { color: var(--muted); }
+  .mono { font-family: 'SFMono-Regular', 'Fira Code', monospace; }
+  .docker-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .docker-toolbar input, .docker-toolbar select, .log-modal-actions input, .log-modal-actions select {
+    background: #0d1f3f;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+    outline: none;
+  }
+  .docker-toolbar input:focus, .docker-toolbar select:focus, .log-modal-actions input:focus, .log-modal-actions select:focus { border-color: var(--accent); }
+  .docker-summary { color: var(--muted); font-size: 13px; }
+  .docker-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  .docker-badge { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); background:#0d1f3f; color:var(--muted); border-radius:999px; padding:2px 7px; font-size:11px; }
+  .svc-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+  .svc-badge { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); background:#0d1f3f; color:var(--muted); border-radius:999px; padding:2px 7px; font-size:11px; }
+  .svc-badge.good { color:#56d364; border-color:rgba(63,185,80,.35); background:rgba(63,185,80,.08); }
+  .svc-badge.warn { color:#d29922; border-color:rgba(210,153,34,.35); background:rgba(210,153,34,.08); }
+  .svc-badge.bad { color:#ffa198; border-color:rgba(248,81,73,.35); background:rgba(248,81,73,.08); }
+  .docker-resource { color:#d2a8ff; font-size:12px; line-height:1.55; }
+  .docker-actions { display:flex; flex-wrap:wrap; gap:6px; min-width:160px; }
+  .action-btn.danger { border-color: rgba(248,81,73,0.45); color: #ffa198; }
+  .action-btn.primary { border-color: rgba(88,166,255,0.55); color: #79c0ff; }
+  mark.log-hit { background: rgba(210,153,34,.45); color: #fff; padding: 0 2px; border-radius: 2px; }
+  .tree {
+    position: relative;
+  }
+  .tree-root {
+    position: relative;
+    text-align: center;
+    padding-top: 4px;
+  }
+  .tree-root-node {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #1f2937, #1a1f2e);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 46px;
+    position: relative;
+    z-index: 2;
+  }
+  .tree-root-node .root-icon { font-size: 22px; }
+  .tree-root-node::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 2px;
+    height: 24px;
+    background: var(--border);
+  }
+  .tree-branches {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 22px;
+    align-items: start;
+    justify-content: center;
+    min-width: max-content;
+  }
+  .tree-branches::before {
+    content: '';
+    position: absolute;
+    left: 9%;
+    right: 9%;
+    top: -22px;
+    height: 2px;
+    background: var(--border);
+  }
+  .tree-branch {
+    position: relative;
+    flex: 0 0 220px;
+    width: 220px;
+    min-width: 220px;
+  }
+  .tree-branch::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -22px;
+    width: 2px;
+    height: 22px;
+    background: var(--border);
+  }
+  .child-tree {
+    position: relative;
+    margin-top: 26px;
+    padding-left: 26px;
+  }
+  .child-tree::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: -14px;
+    bottom: 20px;
+    width: 2px;
+    background: var(--border);
+  }
+  .child-node {
+    position: relative;
+    margin-top: 18px;
+  }
+  .child-node::before {
+    content: '';
+    position: absolute;
+    left: -14px;
+    top: 28px;
+    width: 14px;
+    height: 2px;
+    background: var(--border);
+  }
+  .service-card.nested {
+    background: rgba(15, 23, 42, 0.74);
+  }
+  .service-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .service-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(88,166,255,0.15);
+  }
+  .service-card .service-name {
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .service-card .service-name .svc-icon { font-size: 18px; }
+  .service-card .service-desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 3px;
+  }
+  .service-card .service-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    color: var(--green);
+    text-decoration: none;
+    font-size: 13px;
+    border: 1px solid rgba(63,185,80,0.35);
+    background: rgba(63,185,80,0.08);
+    border-radius: 6px;
+    padding: 4px 9px;
+  }
+  .service-card .service-link:hover {
+    border-color: var(--green);
+    background: rgba(63,185,80,0.14);
+  }
+  .service-card .ports {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .port-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #0d1f3f;
+    border: 1px solid #1c3a6e;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-family: 'SFMono-Regular', 'Fira Code', monospace;
+    color: var(--accent);
+  }
+  .port-tag .proto {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .port-tag .addr {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .no-ports {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 6px;
+    font-style: italic;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .big-icon { font-size: 48px; margin-bottom: 12px; }
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .loading .spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--red);
+  }
+  @media (max-width: 640px) {
+    body { padding: 10px; }
+    .header { min-width: 980px; }
+    .container {
+      max-width: none;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 10px;
+    }
+    .tree {
+      min-width: 980px;
+    }
+    .tree-root-node { margin-bottom: 34px; }
+    .tree-branches {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      gap: 20px;
+      min-width: max-content;
+    }
+    .tree-branches::before {
+      left: 9%;
+      right: 9%;
+      top: -22px;
+      width: auto;
+      height: 2px;
+    }
+    .tree-branch::before {
+      left: 50%;
+      top: -22px;
+      width: 2px;
+      height: 22px;
+    }
+  }
+
+  /* Log viewer */
+  .log-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+  .log-overlay.open { display: flex; }
+  .log-modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 90vw;
+    max-width: 1100px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .log-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .log-modal-header h3 { font-size: 16px; font-weight: 600; }
+  .log-modal-body {
+    flex: 1;
+    overflow: auto;
+    background: #000;
+    padding: 12px 16px;
+    font-family: 'SFMono-Regular','Fira Code',monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #a0d2ff;
+    min-height: 200px;
+    max-height: 70vh;
+  }
+  .log-modal-actions { display: flex; gap: 8px; align-items: center; }
+  .close-btn {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .close-btn:hover { color: var(--text); }
+
+  .tunnel-host { color: var(--accent); font-weight: 600; }
+  .tunnel-service { color: #d2a8ff; font-family: 'SFMono-Regular', 'Fira Code', monospace; font-size: 12px; }
+  .tunnel-link { color: var(--accent); text-decoration: none; }
+  .tunnel-link:hover { text-decoration: underline; }
+  .status-dot { display:inline-flex; align-items:center; gap:6px; }
+
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:1000; align-items:center; justify-content:center; padding:18px; }
+  .modal-overlay.show { display:flex; }
+  .modal { width:420px; max-width:96vw; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; box-shadow:0 18px 60px rgba(0,0,0,.45); }
+  .modal h2 { font-size:18px; margin-bottom:14px; }
+  .form-group { margin-bottom:12px; }
+  .form-group label { display:block; color:var(--muted); font-size:12px; margin-bottom:5px; }
+  .form-group input { width:100%; background:#0d1f3f; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; outline:none; }
+  .form-group input:focus { border-color:var(--accent); }
+  .form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+
+  /* Mobile responsive polish */
+  @media (max-width: 720px) {
+    body { padding: 10px; }
+    .header { margin-bottom: 14px; }
+    .header h1 { font-size: 22px; }
+    .header h1 .icon { font-size: 24px; }
+    .header .subtitle { font-size: 12px; }
+    .header .stats { gap: 8px; margin-top: 10px; }
+    .stat-badge { padding: 5px 9px; font-size: 12px; }
+    .tabs { gap: 6px; margin-bottom: 10px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .tab-btn { flex: 0 0 auto; padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+    .container { max-width: none; width: 100%; }
+    .docker-grid { gap: 10px; }
+    .docker-card { padding: 10px; border-radius: 9px; overflow-x: visible; }
+    .docker-card h2 { font-size: 16px; }
+    .docker-toolbar { gap: 6px; align-items: stretch; }
+    .docker-toolbar h2 { width: 100%; }
+    .docker-toolbar .action-btn, .docker-toolbar input, .docker-toolbar select { min-height: 34px; }
+    .action-btn { padding: 6px 9px; font-size: 12px; }
+    .svc-badges, .docker-badges { gap: 4px; }
+    .svc-badge, .docker-badge { font-size: 10px; padding: 2px 6px; }
+    table { min-width: 0; font-size: 12px; }
+    th, td { padding: 7px 5px; }
+    #tunnel-panel table, #tunnel-panel thead, #tunnel-panel tbody, #tunnel-panel tr, #tunnel-panel th, #tunnel-panel td { display: block; width: 100%; }
+    #tunnel-panel tr { border: 1px solid var(--border); border-radius: 10px; padding: 8px; margin-bottom: 10px; background: rgba(13,31,63,.24); }
+    #tunnel-panel tr:first-child { display: none; }
+    #tunnel-panel td { border-bottom: none; padding: 5px 0; }
+    #tunnel-panel td:nth-child(1)::before { content: '公网域名'; display:block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    #tunnel-panel td:nth-child(2)::before { content: '本地服务'; display:block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    #tunnel-panel td:nth-child(3)::before { content: '同步状态'; display:block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    #tunnel-panel td:nth-child(4)::before { content: '操作'; display:block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+    #tunnel-panel .tunnel-host { word-break: break-all; font-size: 14px; }
+    #tunnel-panel .tunnel-service { word-break: break-all; font-size: 12px; }
+    #tunnel-panel td:last-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    #tunnel-panel td:last-child::before { width: 100%; }
+    .modal { width: 100%; padding: 14px; }
+    .modal h2 { font-size: 16px; }
+    .form-actions { flex-wrap: wrap; }
+    .form-actions .action-btn { flex: 1; }
+    .log-modal { width: 96vw; max-height: 90vh; }
+    .log-modal-header { flex-direction: column; align-items: stretch; gap: 8px; }
+    .log-modal-actions { flex-wrap: wrap; }
+    .tree { overflow-x: auto; }
+  }
+
+  @media (max-width: 420px) {
+    .tab-btn { font-size: 12px; padding: 7px 9px; }
+    .docker-toolbar .action-btn { flex: 1 1 auto; }
+    #tunnel-panel .action-btn { flex: 1 1 auto; text-align: center; }
+  }
+
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><span class="icon">🖥️</span> 控制面板</h1>
+  <div class="subtitle">系统服务与端口监控 · 人字树状图</div>
+  <div class="stats" id="stats"></div>
+</div>
+<div class="tabs">
+  <button class="tab-btn active" id="tab-services" onclick="switchTab('services')">🖥️ 服务端口</button>
+  <button class="tab-btn" id="tab-docker" onclick="switchTab('docker')">🐳 Docker 管理</button>
+  <button class="tab-btn" id="tab-tunnel" onclick="switchTab('tunnel')">🌐 Tunnel</button>
+  <button class="tab-btn" id="tab-yunzai" onclick="switchTab('yunzai')">☁️ TRSS-Yunzai</button>
+</div>
+<div class="container panel" id="services-panel">
+  <div class="tree" id="tree-container">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div>正在获取服务数据...</div>
+    </div>
+  </div>
+</div>
+<div class="container panel hidden" id="docker-panel">
+  <div class="docker-grid" id="docker-container">
+    <div class="loading"><div class="spinner"></div><div>正在获取 Docker 数据...</div></div>
+  </div>
+</div>
+<div class="container panel hidden" id="tunnel-panel">
+  <div class="docker-grid" id="tunnel-container">
+    <div class="loading"><div class="spinner"></div><div>正在获取 Tunnel 状态...</div></div>
+  </div>
+</div>
+<div class="container panel hidden" id="yunzai-panel">
+  <div class="docker-grid" id="yunzai-container">
+    <div class="loading"><div class="spinner"></div><div>正在获取 Yunzai 状态...</div></div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="tunnel-modal" onclick="closeTunnelModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="tunnel-modal-title">新增 Tunnel 规则</h2>
+    <input type="hidden" id="tunnel-original">
+    <div class="form-group">
+      <label>公网域名 / 子域名</label>
+      <input id="tunnel-hostname" placeholder="例如 panel 或 panel.lgh123.online">
+    </div>
+    <div class="form-group">
+      <label>本地服务地址</label>
+      <input id="tunnel-service" placeholder="例如 http://127.0.0.1:1111">
+    </div>
+    <div class="muted" style="font-size:12px;line-height:1.6">只填子域名会自动补全 .lgh123.online。保存后会写入 /etc/cloudflared/config.yml，并自动配置 Cloudflare DNS 路由。</div>
+    <div class="form-actions">
+      <button class="action-btn" onclick="closeTunnelModal()">取消</button>
+      <button class="action-btn primary" onclick="saveTunnelRule()">保存</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="tunnel-quick-modal" onclick="closeTunnelQuickModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>快捷新增 Tunnel 规则</h2>
+    <div class="form-group">
+      <label>子域名</label>
+      <input id="tunnel-quick-sub" placeholder="例如 nav，会生成 nav.lgh123.online">
+    </div>
+    <div class="form-group">
+      <label>本地端口</label>
+      <input id="tunnel-quick-port" placeholder="例如 1111，会转发到 http://127.0.0.1:1111">
+    </div>
+    <div class="form-group">
+      <label>路径，可留空</label>
+      <input id="tunnel-quick-path" placeholder="例如 /webui，可留空">
+    </div>
+    <div class="muted" style="font-size:12px;line-height:1.6">
+      固定域名：lgh123.online<br>
+      固定本地地址：127.0.0.1<br>
+      生成格式：https://子域名.lgh123.online → http://127.0.0.1:端口/路径
+    </div>
+    <div class="form-actions">
+      <button class="action-btn" onclick="closeTunnelQuickModal()">取消</button>
+      <button class="action-btn primary" onclick="saveTunnelQuickRule()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Service icons mapping
+const ICONS = {
+  ssh: '🔐', sshd: '🔐', 'ssh.service': '🔐',
+  dbus: '🔌',
+  mihomo: '🌐',
+  systemd: '⚙️', 'systemd-journald': '📋', 'systemd-logind': '👤', 'systemd-udevd': '🔧',
+  picoclaw: '🦞', picoclaw_launch: '🚀', server_dashboard: '📊', astrbot: '🤖',
+  napcat: '🐱', qq: '🐱',
+  'console-getty': '💻',
+};
+const DEFAULT_ICON = '⚡';
+
+function getIcon(name) {
+  return ICONS[name] || ICONS[name.replace(/\.service$/, '')] || DEFAULT_ICON;
+}
+
+async function loadData() {
+  const container = document.getElementById('tree-container');
+  const statsEl = document.getElementById('stats');
+  try {
+    const res = await fetch('/api/services');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const services = await res.json();
+
+    // Stats
+    const totalServices = services.length;
+    const totalPorts = services.reduce((s, svc) => s + svc.ports.length, 0);
+    statsEl.innerHTML = `
+      <span class="stat-badge">📦 服务 <span class="num">${totalServices}</span></span>
+      <span class="stat-badge">🔌 端口 <span class="num">${totalPorts}</span></span>
+      <span class="stat-badge">🕐 <span id="live-clock">${new Date().toLocaleString('zh-CN')}</span></span>
+    `;
+
+    // Build tree
+    let html = '<div class="tree-root">';
+    html += '<div class="tree-root-node"><span class="root-icon">🐧</span> 本机 · one</div>';
+    html += '<div class="tree-branches" id="branches">';
+
+    if (services.length === 0) {
+      html += '<div class="empty-state"><div class="big-icon">📭</div><div>暂无运行中的服务</div></div>';
+    } else {
+      const byName = Object.fromEntries(services.map(s => [s.name, s]));
+      const used = new Set();
+
+      function take(name) {
+        const s = byName[name];
+        if (s) used.add(name);
+        return s;
+      }
+
+      // Topology based on current independent services:
+      // containerd -> all Docker container services.
+      // server_dashboard and astrbot are independent branches.
+      const containerd = take('containerd');
+      const launcher = take('picoclaw_launch');
+      const picoclaw = take('picoclaw');
+      const dashboard = take('server_dashboard') || take('perl');
+      const astrbot = take('astrbot');
+
+      // Any service carrying container_id is a Docker container service.
+      // Put them at the same level under containerd, e.g. napcat and test_nine.
+      const dockerChildren = services.filter(s => s.container_id && s.name !== 'containerd');
+      for (const s of dockerChildren) used.add(s.name);
+
+      for (const name of ['ssh', 'mihomo']) {
+        const svc = take(name);
+        if (svc) html += renderBranch(svc);
+      }
+
+      if (astrbot) html += renderBranch(astrbot);
+      if (dashboard) html += renderBranch(dashboard);
+
+      if (containerd) {
+        html += '<div class="tree-branch">' + renderCard(containerd);
+        if (dockerChildren.length) {
+          html += '<div class="child-tree">';
+          for (const child of dockerChildren) {
+            html += '<div class="child-node">' + renderCard(child, true) + '</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      } else {
+        for (const child of dockerChildren) html += renderBranch(child);
+      }
+
+      if (launcher) {
+        html += '<div class="tree-branch">' + renderCard(launcher);
+        if (picoclaw) {
+          html += '<div class="child-tree"><div class="child-node">' + renderCard(picoclaw, true) + '</div></div>';
+        }
+        html += '</div>';
+      } else if (picoclaw) {
+        html += renderBranch(picoclaw);
+      }
+
+      for (const svc of services) {
+        if (!used.has(svc.name)) html += renderBranch(svc);
+      }
+    }
+
+    html += '</div></div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="error-state">❌ 加载失败: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderBranch(svc) {
+  return '<div class="tree-branch">' + renderCard(svc) + '</div>';
+}
+
+function yesNoText(v) {
+  if (v === 'yes') return '是';
+  if (v === 'no') return '否';
+  return '未知';
+}
+
+function lifecycleBadges(svc) {
+  let html = '<div class="svc-badges">';
+  if (svc.source) html += `<span class="svc-badge">来源 ${escHtml(svc.source)}</span>`;
+  const autoCls = svc.autostart === 'yes' ? 'good' : (svc.autostart === 'no' ? 'bad' : 'warn');
+  const restartCls = svc.auto_restart === 'yes' ? 'good' : (svc.auto_restart === 'no' ? 'bad' : 'warn');
+  html += `<span class="svc-badge ${autoCls}">自启 ${yesNoText(svc.autostart)}</span>`;
+  html += `<span class="svc-badge ${restartCls}">异常重启 ${yesNoText(svc.auto_restart)}</span>`;
+  if (svc.restart_policy) html += `<span class="svc-badge">策略 ${escHtml(svc.restart_policy)}</span>`;
+  if (svc.network_mode) html += `<span class="svc-badge">网络 ${escHtml(svc.network_mode)}</span>`;
+  if (svc.unit_state) html += `<span class="svc-badge">systemd ${escHtml(svc.unit_state)}</span>`;
+  html += '</div>';
+  return html;
+}
+
+function renderCard(svc, nested = false) {
+  const icon = getIcon(svc.name);
+  const desc = svc.description || '';
+  let html = `<div class="service-card${nested ? ' nested' : ''}">`;
+  html += `<div class="service-name"><span class="svc-icon">${icon}</span> ${escHtml(svc.name)}</div>`;
+  if (desc) html += `<div class="service-desc">${escHtml(desc)}</div>`;
+  html += lifecycleBadges(svc);
+  if (svc.container_id) {
+    const dockerLoc = svc.host_location || svc.container_location || svc.cwd || '';
+    const locLabel = svc.host_location ? '宿主机' : '容器内';
+    html += `<div class="service-desc mono">🐳 ${escHtml(svc.container_name || svc.name)}${svc.container_image ? ' · ' + escHtml(svc.container_image) : ''}</div>`;
+    if (dockerLoc) html += `<div class="service-desc mono">📍 ${locLabel}: ${escHtml(dockerLoc)}${svc.pid ? ' · PID ' + escHtml(svc.pid) : ''}</div>`;
+  } else if (svc.cwd || svc.exe || svc.cmd || svc.pid) {
+    const loc = svc.cwd || svc.exe || svc.cmd || '';
+    html += `<div class="service-desc mono">📍 ${escHtml(loc)}${svc.pid ? ' · PID ' + escHtml(svc.pid) : ''}</div>`;
+    if (svc.unit) html += `<div class="service-desc mono">⚙️ ${escHtml(svc.unit)}${svc.unit_file ? ' · ' + escHtml(svc.unit_file) : ''}</div>`;
+  }
+  const webUrl = svc.url || knownWebUrl(svc);
+  if (webUrl) {
+    const link = normalizeUrl(webUrl);
+    html += `<a class="service-link" href="${escAttr(link)}" target="_blank" rel="noopener">🔗 打开 WebUI</a>`;
+  }
+  if (svc.ports.length > 0) {
+    html += '<div class="ports">';
+    for (const p of svc.ports) {
+      html += `<span class="port-tag" title="PID ${escAttr(p.pid || svc.pid || '')}"><span class="proto">${p.proto}</span> ${escHtml(p.port)} <span class="addr">${escHtml(p.addr)}</span></span>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function knownWebUrl(svc) {
+  const name = String(svc.name || '').toLowerCase();
+  const ports = (svc.ports || []).map(p => String(p.port));
+
+  // Confirmed WebUIs / HTTP endpoints on this host
+  if (name === 'mihomo' || ports.includes('9090')) return 'http://__HOST__:9090/ui/';
+  if (name === 'napcat' || name === 'qq' || ports.includes('6099')) return 'http://__HOST__:6099/webui';
+  if (name === 'server_dashboard' || name === 'perl' || ports.includes('1111')) return 'http://__HOST__:1111/';
+  if (name === 'picoclaw_launch' || name === 'picoclaw-launch' || ports.includes('18800')) return 'http://__HOST__:18800/';
+
+  // Generic HTTP-ish ports: expose a cautious direct link
+  const webPorts = ['80','443','3000','5000','5173','8000','8080','8081','8888','9000','9090'];
+  const p = ports.find(x => webPorts.includes(x));
+  if (p) return (p === '443' ? 'https' : 'http') + '://__HOST__:' + p + '/';
+  return '';
+}
+
+function normalizeUrl(url) {
+  return String(url || '').replace('__HOST__', window.location.hostname || '127.0.0.1');
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, '&quot;');
+}
+
+
+
+async function loadTunnel() {
+  const el = document.getElementById('tunnel-container');
+  try {
+    const res = await fetch('/api/tunnel/status');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const active = data.status === 'active';
+    let html = '<div class="docker-card"><div class="docker-toolbar"><h2>🌐 Cloudflare Tunnel</h2>';
+    html += '<button class="action-btn primary" onclick="openTunnelQuickModal()">+ 快捷新增</button><button class="action-btn" onclick="openTunnelModal()">+ 自定义新增</button>';
+    html += '<button class="action-btn primary" onclick="loadTunnel()">刷新</button>';
+    html += '<button class="action-btn" onclick="restartTunnel()">重启 Tunnel</button>';
+    html += '<span class="svc-badge ' + (active ? 'good' : 'bad') + '">● ' + escHtml(data.status || 'unknown') + '</span>';
+    html += '<span class="muted">' + escHtml(new Date().toLocaleString('zh-CN')) + '</span></div>';
+    html += '<div class="svc-badges">';
+    html += '<span class="svc-badge">服务 cloudflared.service</span>';
+    html += '<span class="svc-badge ' + (data.enabled === 'enabled' ? 'good' : 'warn') + '">自启 ' + escHtml(data.enabled || 'unknown') + '</span>';
+    html += '<span class="svc-badge">配置 /etc/cloudflared/config.yml</span>';
+    if (data.tunnel_id) html += '<span class="svc-badge">Tunnel ' + escHtml(data.tunnel_name || '') + ' · ' + escHtml(data.tunnel_id) + '</span>';
+    html += '</div>';
+    html += '<table><tbody>';
+    html += '<tr><th>公网域名</th><th>本地服务</th><th>同步状态</th><th>访问 / 操作</th></tr>';
+    const ingress = data.ingress || [];
+    if (!ingress.length) {
+      html += '<tr><td colspan="4" class="muted">暂无 hostname 映射</td></tr>';
+    } else {
+      for (const r of ingress) {
+        const h = r.hostname || '';
+        const url = h ? ('https://' + h) : '';
+        html += '<tr><td class="tunnel-host">' + escHtml(h || '-') + '</td><td class="tunnel-service">' + escHtml(r.service || '-') + '</td><td>' + tunnelRuleStatusBadges(r) + '</td><td>';
+        if (url) html += '<a class="action-btn primary" target="_blank" rel="noopener" href="' + escAttr(url) + '">打开</a> ';
+        html += '<button class="action-btn" onclick="openTunnelModal(' + encodeURIComponent(JSON.stringify(r)) + ')">编辑</button> ';
+        html += '<button class="action-btn danger" onclick="deleteTunnelRule(\'' + escAttr(h) + '\')">删除</button>';
+        html += '</td></tr>';
+      }
+    }
+    html += '</tbody></table></div>';
+
+    html += '<div class="docker-card"><div class="docker-toolbar"><h2>📋 Tunnel 列表</h2><span class="docker-summary">来自 cloudflared tunnel list</span></div>';
+    html += '<pre class="log-modal-body" style="max-height:280px">' + escHtml(data.tunnels || '(空)') + '</pre></div>';
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = '<div class="error-state">❌ Tunnel 加载失败: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+
+function tunnelRuleStatusBadges(r) {
+  let html = '<div class="svc-badges">';
+  html += '<span class="svc-badge ' + (r.synced === 'yes' ? 'good' : 'bad') + '">CF ' + (r.synced === 'yes' ? '已同步' : '未同步') + '</span>';
+  html += '<span class="svc-badge ' + (r.dns_ok === 'yes' ? 'good' : 'bad') + '" title="' + escAttr(r.dns || '') + '">DNS ' + (r.dns_ok === 'yes' ? 'OK' : '无') + '</span>';
+  html += '</div>';
+  return html;
+}
+
+function openTunnelModal(encoded) {
+  let r = null;
+  if (encoded) {
+    try { r = JSON.parse(decodeURIComponent(encoded)); } catch(e) { r = null; }
+  }
+  document.getElementById('tunnel-modal-title').textContent = r ? '编辑 Tunnel 规则' : '新增 Tunnel 规则';
+  document.getElementById('tunnel-original').value = r ? (r.hostname || '') : '';
+  document.getElementById('tunnel-hostname').value = r ? (r.hostname || '') : '';
+  document.getElementById('tunnel-service').value = r ? (r.service || '') : '';
+  document.getElementById('tunnel-modal').classList.add('show');
+}
+
+function closeTunnelModal(e) {
+  if (e && e.target && e.target.id !== 'tunnel-modal') return;
+  document.getElementById('tunnel-modal').classList.remove('show');
+}
+
+async function saveTunnelRule() {
+  let hostname = document.getElementById('tunnel-hostname').value.trim();
+  const service = document.getElementById('tunnel-service').value.trim();
+  const original = document.getElementById('tunnel-original').value.trim();
+  if (hostname && !hostname.includes('.')) hostname += '.lgh123.online';
+  if (!hostname || !service) { alert('请填写域名和本地服务地址'); return; }
+  if (!/^https?:\/\//.test(service) && !/^ssh:\/\//.test(service) && !/^tcp:\/\//.test(service)) { alert('本地服务地址需要以 http:// 或 https:// 开头'); return; }
+  const url = '/api/tunnel/save?hostname=' + encodeURIComponent(hostname) + '&service=' + encodeURIComponent(service) + '&original=' + encodeURIComponent(original);
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) { alert('保存失败: ' + (data.error || res.status)); return; }
+  closeTunnelModal();
+  setTimeout(loadTunnel, 1200);
+}
+
+async function deleteTunnelRule(hostname) {
+  if (!confirm('确认删除 ' + hostname + ' ？')) return;
+  const res = await fetch('/api/tunnel/delete?hostname=' + encodeURIComponent(hostname));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) { alert('删除失败: ' + (data.error || res.status)); return; }
+  setTimeout(loadTunnel, 1200);
+}
+
+
+function openTunnelQuickModal() {
+  document.getElementById('tunnel-quick-sub').value = '';
+  document.getElementById('tunnel-quick-port').value = '';
+  document.getElementById('tunnel-quick-path').value = '';
+  document.getElementById('tunnel-quick-modal').classList.add('show');
+}
+
+function closeTunnelQuickModal(e) {
+  if (e && e.target && e.target.id !== 'tunnel-quick-modal') return;
+  document.getElementById('tunnel-quick-modal').classList.remove('show');
+}
+
+async function saveTunnelQuickRule() {
+  const sub = document.getElementById('tunnel-quick-sub').value.trim();
+  const port = document.getElementById('tunnel-quick-port').value.trim();
+  let path = document.getElementById('tunnel-quick-path').value.trim();
+  if (!sub || !port) { alert('请填写子域名和端口'); return; }
+  if (!/^[A-Za-z0-9-]+$/.test(sub)) { alert('子域名只能包含字母、数字、短横线'); return; }
+  if (!/^[0-9]{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) { alert('端口不合法'); return; }
+  if (path && !path.startsWith('/')) path = '/' + path;
+  const hostname = sub + '.lgh123.online';
+  const service = 'http://127.0.0.1:' + port + path;
+  const res = await fetch('/api/tunnel/save?hostname=' + encodeURIComponent(hostname) + '&service=' + encodeURIComponent(service) + '&original=');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) { alert('保存失败: ' + (data.error || res.status)); return; }
+  closeTunnelQuickModal();
+  setTimeout(loadTunnel, 1200);
+}
+
+async function restartTunnel() {
+  if (!confirm('确认重启 cloudflared Tunnel？')) return;
+  try {
+    const res = await fetch('/api/tunnel/restart');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status));
+    setTimeout(loadTunnel, 1500);
+  } catch (err) {
+    alert('重启失败: ' + err.message);
+  }
+}
+
+let currentTab = 'services';
+
+const yunzaiLog = {
+  preview: { raw: '', first: true, outOffset: 0, errOffset: 0, elId: 'yunzai-log-preview', lines: 120, tailMode: 'out_tail', deltaMode: 'out_delta' },
+  modal: { raw: '', first: true, outOffset: 0, errOffset: 0, elId: 'log-modal-body', lines: 500, tailMode: 'tail', deltaMode: 'delta' },
+};
+
+function resetYunzaiLogState(target, lines) {
+  target.raw = '';
+  target.first = true;
+  target.outOffset = 0;
+  target.errOffset = 0;
+  if (lines) target.lines = Number(lines) || target.lines;
+}
+
+function yunzaiLogUrl(target, forceTail = false) {
+  if (forceTail || target.first) {
+    return '/api/yunzai/logs?mode=' + encodeURIComponent(target.tailMode || 'tail') + '&lines=' + encodeURIComponent(target.lines || 100);
+  }
+  return '/api/yunzai/logs?mode=' + encodeURIComponent(target.deltaMode || 'delta') + '&out_offset=' + encodeURIComponent(target.outOffset || 0) + '&err_offset=' + encodeURIComponent(target.errOffset || 0);
+}
+
+async function fetchYunzaiLog(target, opts = {}) {
+  const forceTail = !!opts.forceTail;
+  const append = opts.append !== false;
+  const el = document.getElementById(target.elId);
+  if (!el) return;
+  try {
+    if (forceTail) resetYunzaiLogState(target, target.lines);
+    const res = await fetch(yunzaiLogUrl(target, forceTail));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'unknown error');
+
+    const raw = data.logs || '';
+    const outReset = String(data.out_reset || '0') === '1';
+    const errReset = String(data.err_reset || '0') === '1';
+    target.outOffset = Number(data.out_offset || 0);
+    target.errOffset = Number(data.err_offset || 0);
+
+    if (target.first || forceTail || outReset || errReset || !append) {
+      target.raw = raw;
+      target.first = false;
+      el.innerHTML = ansiToHtml(raw || '(空)');
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+
+    if (!raw) return;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+    target.raw += raw;
+    el.insertAdjacentHTML('beforeend', ansiToHtml(raw));
+    if (atBottom) el.scrollTop = el.scrollHeight;
+  } catch (err) {
+    el.textContent = '❌ 加载日志失败: ' + err.message;
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('services-panel').classList.toggle('hidden', tab !== 'services');
+  document.getElementById('docker-panel').classList.toggle('hidden', tab !== 'docker');
+  document.getElementById('tunnel-panel').classList.toggle('hidden', tab !== 'tunnel');
+  document.getElementById('yunzai-panel').classList.toggle('hidden', tab !== 'yunzai');
+  document.getElementById('tab-services').classList.toggle('active', tab === 'services');
+  document.getElementById('tab-docker').classList.toggle('active', tab === 'docker');
+  document.getElementById('tab-tunnel').classList.toggle('active', tab === 'tunnel');
+  document.getElementById('tab-yunzai').classList.toggle('active', tab === 'yunzai');
+  if (tab === 'docker') loadDocker();
+  else if (tab === 'tunnel') loadTunnel();
+  else if (tab === 'yunzai') loadYunzai();
+  else loadData();
+}
+
+async function loadYunzai() {
+  const el = document.getElementById('yunzai-container');
+  try {
+    const res = await fetch('/api/yunzai');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const app = (data.pm2 || []).find(x => x.name === 'TRSS-Yunzai') || {};
+    const env = app.pm2_env || {};
+    let html = '<div class="docker-card"><div class="docker-toolbar"><h2>☁️ TRSS-Yunzai</h2>';
+    html += '<button class="action-btn primary" onclick="loadYunzai()">刷新状态</button>';
+    html += '<button class="action-btn primary" onclick="yunzaiAction(\'start\')">启动</button>';
+    html += '<button class="action-btn" onclick="yunzaiAction(\'restart\')">重启</button>';
+    html += '<button class="action-btn danger" onclick="yunzaiAction(\'stop\')">停止</button>';
+    html += '<button class="action-btn" onclick="openYunzaiLogs()">📋 日志</button>';
+    html += '<button class="action-btn" onclick="yunzaiAction(\'save\')">保存进程列表</button>';
+    html += '<button class="action-btn primary" onclick="yunzaiAction(\'enable_autostart\')">启用PM2自启</button>';
+    html += '<button class="action-btn danger" onclick="yunzaiAction(\'disable_autostart\')">禁用PM2自启</button>';
+    html += '<span class="muted">' + escHtml(new Date().toLocaleString('zh-CN')) + '</span></div>';
+    html += '<div class="svc-badges">';
+    html += '<span class="svc-badge ' + (env.status === 'online' ? 'good' : 'bad') + '">状态 ' + escHtml(env.status || 'unknown') + '</span>';
+    html += '<span class="svc-badge">PID ' + escHtml(app.pid || '-') + '</span>';
+    html += '<span class="svc-badge">重启 ' + escHtml(env.restart_time ?? '-') + '</span>';
+    html += '<span class="svc-badge">Node ' + escHtml(data.node || '-') + '</span>';
+    html += '<span class="svc-badge">pnpm ' + escHtml(data.pnpm || '-') + '</span>';
+    html += '<span class="svc-badge ' + (data.valkey === 'PONG' ? 'good' : 'warn') + '">Valkey ' + escHtml(data.valkey || '-') + '</span>';
+    html += '<span class="svc-badge ' + (data.pm2_enabled === 'enabled' ? 'good' : 'bad') + '">PM2自启 ' + escHtml(data.pm2_enabled || 'unknown') + '</span>';
+    html += '<span class="svc-badge ' + (data.pm2_dump === 'yes' ? 'good' : 'warn') + '">进程列表 ' + (data.pm2_dump === 'yes' ? '已保存' : '未保存') + '</span>';
+    html += '<span class="svc-badge">pm2-root ' + escHtml(data.pm2_active || '-') + '</span>';
+    html += '</div>';
+    html += '<table><tbody>';
+    html += '<tr><th>目录</th><td class="mono">/root/Yunzai</td></tr>';
+    html += '<tr><th>WebSocket</th><td class="mono">ws://127.0.0.1:2536/OneBotv11</td></tr>';
+    html += '<tr><th>监听</th><td class="mono">' + escHtml(data.port || '-') + '</td></tr>';
+    html += '<tr><th>连接</th><td class="mono">' + escHtml(data.connections || '-') + '</td></tr>';
+    html += '<tr><th>Guoba</th><td><a class="action-btn primary" target="_blank" rel="noopener noreferrer" href="http://' + (window.location.hostname || '127.0.0.1') + ':2536/guoba">打开 Guoba 面板</a><span class="muted">&nbsp;http://' + escHtml(window.location.hostname || '127.0.0.1') + ':2536/guoba</span></td></tr>';
+    html += '</tbody></table></div>';
+    html += '<div class="docker-card"><div class="docker-toolbar"><h2>📋 日志预览</h2><span class="docker-summary">仅显示 TRSS-Yunzai out 日志最新输出，随后增量追加</span><button class="action-btn" onclick="refreshYunzaiPreviewLog()">刷新日志</button><button class="action-btn" onclick="openYunzaiLogs()">打开完整日志</button></div><pre class="log-modal-body" id="yunzai-log-preview" style="max-height:360px">加载中...</pre></div>';
+    el.innerHTML = html;
+    resetYunzaiLogState(yunzaiLog.preview, 120);
+    fetchYunzaiLog(yunzaiLog.preview, {forceTail: true});
+  } catch (err) {
+    el.innerHTML = '<div class="error-state">❌ Yunzai 加载失败: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+function refreshYunzaiPreviewLog() {
+  resetYunzaiLogState(yunzaiLog.preview, 120);
+  fetchYunzaiLog(yunzaiLog.preview, {forceTail: true});
+}
+
+async function yunzaiAction(op) {
+  const label = {start:'启动', stop:'停止', restart:'重启', save:'保存进程列表', enable_autostart:'启用PM2自启', disable_autostart:'禁用PM2自启'}[op] || op;
+  if (!confirm('确认要' + label + ' TRSS-Yunzai？')) return;
+  try {
+    const res = await fetch('/api/yunzai/action?op=' + encodeURIComponent(op));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status));
+  } catch (err) {
+    alert('操作失败: ' + err.message);
+  }
+  setTimeout(loadYunzai, 1200);
+}
+
+function openYunzaiLogs() {
+  _logName = '__yunzai__';
+  _logRaw = '';
+  const lines = document.getElementById('log-lines') ? document.getElementById('log-lines').value : '500';
+  resetYunzaiLogState(yunzaiLog.modal, lines);
+  document.getElementById('log-container-name').textContent = 'TRSS-Yunzai';
+  document.getElementById('log-modal-body').textContent = '加载中...';
+  document.getElementById('log-overlay').classList.add('open');
+  reloadLogs();
+}
+
+let _dockerData = { containers: [], images: [], stats: [] };
+let _dockerFilter = { q: '', state: 'all' };
+let _dockerAutoTimer = null;
+let _dockerAutoSeconds = 0;
+
+async function loadDocker() {
+  const el = document.getElementById('docker-container');
+  try {
+    const res = await fetch('/api/docker');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    _dockerData = { containers: data.containers || [], images: data.images || [], stats: data.stats || [] };
+    renderDocker();
+  } catch (err) {
+    el.innerHTML = '<div class="error-state">❌ Docker 加载失败: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+function dockerStatsMap() {
+  const map = {};
+  for (const st of (_dockerData.stats || [])) {
+    if (st.Name) map[st.Name] = st;
+    if (st.Container) map[st.Container] = st;
+    if (st.ID) map[st.ID] = st;
+  }
+  return map;
+}
+
+function parseDockerLabels(labels) {
+  const obj = {};
+  String(labels || '').split(',').forEach(pair => {
+    const i = pair.indexOf('=');
+    if (i > 0) obj[pair.slice(0,i)] = pair.slice(i+1);
+  });
+  return obj;
+}
+
+function shortImage(image) {
+  return String(image || '').replace(/^docker\.io\//, '').replace(/^library\//, '');
+}
+
+function renderDocker() {
+  const el = document.getElementById('docker-container');
+  const containers = _dockerData.containers || [];
+  const images = _dockerData.images || [];
+  const statsMap = dockerStatsMap();
+  const q = (_dockerFilter.q || '').toLowerCase().trim();
+  const stateFilter = _dockerFilter.state || 'all';
+  const filtered = containers.filter(c => {
+    const state = String(c.State || '').toLowerCase();
+    const labels = parseDockerLabels(c.Labels || '');
+    const hay = [c.Names, c.Name, c.ID, c.Image, c.Status, labels['com.docker.compose.project'], labels['com.docker.compose.service']].join(' ').toLowerCase();
+    return (!q || hay.includes(q)) && (stateFilter === 'all' || state === stateFilter);
+  });
+  const running = containers.filter(c => String(c.State || '').toLowerCase() === 'running').length;
+  const exited = containers.filter(c => String(c.State || '').toLowerCase() === 'exited').length;
+  const restarting = containers.filter(c => String(c.State || '').toLowerCase() === 'restarting').length;
+
+  let html = '<div class="docker-card"><div class="docker-toolbar">';
+  html += '<h2>🐳 容器</h2>';
+  html += '<button class="action-btn primary" onclick="loadDocker()">刷新</button>';
+  html += '<input id="docker-search" placeholder="搜索名称/镜像/Compose" value="' + escAttr(_dockerFilter.q) + '" oninput="dockerSetFilter(this.value, null)">';
+  html += '<select id="docker-state-filter" onchange="dockerSetFilter(null, this.value)">';
+  for (const item of [['all','全部状态'],['running','运行中'],['exited','已停止'],['restarting','重启中'],['dead','异常']]) {
+    html += '<option value="' + item[0] + '"' + (stateFilter === item[0] ? ' selected' : '') + '>' + item[1] + '</option>';
+  }
+  html += '</select>';
+  html += '<select id="docker-auto-refresh" onchange="dockerSetAutoRefresh(this.value)">';
+  for (const item of [[0,'手动刷新'],[5,'5秒自动'],[15,'15秒自动'],[30,'30秒自动']]) {
+    html += '<option value="' + item[0] + '"' + (_dockerAutoSeconds === item[0] ? ' selected' : '') + '>' + item[1] + '</option>';
+  }
+  html += '</select>';
+  html += '<span class="docker-summary">共 ' + containers.length + ' 个，运行 ' + running + ' 个，停止 ' + exited + ' 个' + (restarting ? '，重启 ' + restarting + ' 个' : '') + '；显示 ' + filtered.length + ' 个</span>';
+  html += '<span class="muted">' + escHtml(new Date().toLocaleString('zh-CN')) + '</span>';
+  html += '</div>';
+
+  if (!containers.length) {
+    html += '<div class="empty-state">暂无容器</div>';
+  } else if (!filtered.length) {
+    html += '<div class="empty-state">没有匹配的容器</div>';
+  } else {
+    html += '<table><thead><tr><th>容器</th><th>镜像 / Compose</th><th>状态</th><th>资源</th><th>操作</th></tr></thead><tbody>';
+    for (const c of filtered) {
+      const state = String(c.State || '').toLowerCase();
+      const cls = state ? 'state-' + state : '';
+      const name = c.Names || c.Name || c.ID || '';
+      const labels = parseDockerLabels(c.Labels || '');
+      const composeProject = labels['com.docker.compose.project'] || '';
+      const composeService = labels['com.docker.compose.service'] || '';
+      const st = statsMap[name] || statsMap[(c.ID || '').slice(0,12)] || statsMap[c.ID] || {};
+      html += '<tr>';
+      html += '<td class="mono">' + escHtml(name) + '<br><span class="muted">' + escHtml((c.ID || '').slice(0,12)) + '</span>';
+      html += '<div class="docker-badges">' + (c.Size ? '<span class="docker-badge">💾 ' + escHtml(c.Size) + '</span>' : '') + '</div></td>';
+      html += '<td>' + escHtml(shortImage(c.Image || ''));
+      html += '<div class="docker-badges">';
+      if (composeProject) html += '<span class="docker-badge">📦 ' + escHtml(composeProject) + '</span>';
+      if (composeService) html += '<span class="docker-badge">🔧 ' + escHtml(composeService) + '</span>';
+      html += '</div></td>';
+      html += '<td><span class="' + escAttr(cls) + '">' + escHtml(c.State || '') + '</span><br><span class="muted">' + escHtml(c.Status || '') + '</span><br><span class="muted">' + escHtml(c.RunningFor || '') + '</span></td>';
+      html += '<td class="docker-resource">';
+      if (Object.keys(st).length) {
+        html += 'CPU ' + escHtml(st.CPUPerc || '-') + '<br>MEM ' + escHtml(st.MemPerc || '-') + '<br><span class="muted">' + escHtml(st.MemUsage || '') + '</span><br><span class="muted">NET ' + escHtml(st.NetIO || '-') + '</span><br><span class="muted">IO ' + escHtml(st.BlockIO || '-') + '</span>';
+      } else {
+        html += '<span class="muted">停止/无数据</span>';
+      }
+      html += '</td>';
+      html += '<td><div class="docker-actions">' + dockerButtons(name, state) + '</div></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  html += '<div class="docker-card"><div class="docker-toolbar"><h2>🖼️ 镜像</h2><span class="docker-summary">共 ' + images.length + ' 个镜像</span></div>';
+  if (!images.length) {
+    html += '<div class="empty-state">暂无镜像</div>';
+  } else {
+    html += '<table><thead><tr><th>仓库</th><th>标签</th><th>ID</th><th>大小</th><th>创建时间</th></tr></thead><tbody>';
+    for (const img of images) {
+      html += '<tr><td>' + escHtml(img.Repository || '') + '</td><td>' + escHtml(img.Tag || '') + '</td><td class="mono">' + escHtml(img.ID || '') + '</td><td>' + escHtml(img.Size || '') + '</td><td>' + escHtml(img.CreatedSince || '') + '</td></tr>';
+    }
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function dockerSetFilter(q, state) {
+  if (q !== null) _dockerFilter.q = q;
+  if (state !== null) _dockerFilter.state = state;
+  renderDocker();
+}
+
+function dockerSetAutoRefresh(seconds) {
+  _dockerAutoSeconds = Number(seconds) || 0;
+  if (_dockerAutoTimer) clearInterval(_dockerAutoTimer);
+  _dockerAutoTimer = null;
+  if (_dockerAutoSeconds > 0) {
+    _dockerAutoTimer = setInterval(() => { if (currentTab === 'docker') loadDocker(); }, _dockerAutoSeconds * 1000);
+  }
+  renderDocker();
+}
+
+function dockerButtons(name, state) {
+  const n = escAttr(name);
+  let html = '';
+  if (state === 'running') html += '<button class="action-btn danger" onclick="dockerAction(\'stop\',\'' + n + '\')">停止</button>';
+  else html += '<button class="action-btn primary" onclick="dockerAction(\'start\',\'' + n + '\')">启动</button>';
+  html += '<button class="action-btn" onclick="dockerAction(\'restart\',\'' + n + '\')">重启</button>';
+  html += '<button class="action-btn" onclick="openLogs(\'' + n + '\')">📋 日志</button>';
+  return html;
+}
+
+async function dockerAction(op, name) {
+  const label = {start:'启动', stop:'停止', restart:'重启'}[op] || op;
+  if (!confirm('确认要' + label + '容器：' + name + '？')) return;
+  try {
+    const res = await fetch('/api/docker/action?op=' + encodeURIComponent(op) + '&name=' + encodeURIComponent(name));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status));
+  } catch (err) {
+    alert('操作失败: ' + err.message);
+  }
+  await loadDocker();
+}
+
+
+
+// Log viewer
+let _logName = '';
+let _logRaw = '';
+let _logFilter = '';
+
+function ansiToHtml(input) {
+  const text = String(input || '');
+  const fg = {
+    30:'#6e7681', 31:'#ff7b72', 32:'#3fb950', 33:'#d29922',
+    34:'#58a6ff', 35:'#bc8cff', 36:'#39c5cf', 37:'#e6edf3',
+    90:'#8b949e', 91:'#ffa198', 92:'#56d364', 93:'#e3b341',
+    94:'#79c0ff', 95:'#d2a8ff', 96:'#56d4dd', 97:'#ffffff'
+  };
+  const bg = {
+    40:'#0d1117', 41:'#6e1512', 42:'#0f3d19', 43:'#4d3800',
+    44:'#0d2d57', 45:'#3c1e70', 46:'#0d3f44', 47:'#30363d',
+    100:'#484f58', 101:'#8e241f', 102:'#196c2e', 103:'#6b4f00',
+    104:'#1f6feb', 105:'#6e40c9', 106:'#16838a', 107:'#f0f6fc'
+  };
+  const state = {color:'', background:'', bold:false, dim:false, italic:false, underline:false};
+  let out = '';
+  let last = 0;
+  let open = false;
+
+  function styleText() {
+    const st = [];
+    if (state.color) st.push('color:' + state.color);
+    if (state.background) st.push('background-color:' + state.background);
+    if (state.bold) st.push('font-weight:700');
+    if (state.dim) st.push('opacity:.72');
+    if (state.italic) st.push('font-style:italic');
+    if (state.underline) st.push('text-decoration:underline');
+    return st.join(';');
+  }
+  function closeSpan() { if (open) { out += '</span>'; open = false; } }
+  function openSpan() { const st = styleText(); if (st) { out += '<span style="' + escAttr(st) + '">'; open = true; } }
+  function reset() { state.color=''; state.background=''; state.bold=false; state.dim=false; state.italic=false; state.underline=false; }
+
+  const re = /\x1b\[([0-9;]*)m|\[([0-9;]*)m/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    out += escHtml(text.slice(last, m.index));
+    closeSpan();
+    const raw = (m[1] ?? m[2] ?? '') || '0';
+    const codes = raw.split(';').filter(x => x !== '').map(x => Number(x));
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i];
+      if (c === 0) reset();
+      else if (c === 1) state.bold = true;
+      else if (c === 2) state.dim = true;
+      else if (c === 3) state.italic = true;
+      else if (c === 4) state.underline = true;
+      else if (c === 22) { state.bold = false; state.dim = false; }
+      else if (c === 23) state.italic = false;
+      else if (c === 24) state.underline = false;
+      else if (c === 39) state.color = '';
+      else if (c === 49) state.background = '';
+      else if (fg[c]) state.color = fg[c];
+      else if (bg[c]) state.background = bg[c];
+      else if (c === 38 && codes[i+1] === 2 && i + 4 < codes.length) {
+        state.color = `rgb(${codes[i+2]},${codes[i+3]},${codes[i+4]})`; i += 4;
+      } else if (c === 48 && codes[i+1] === 2 && i + 4 < codes.length) {
+        state.background = `rgb(${codes[i+2]},${codes[i+3]},${codes[i+4]})`; i += 4;
+      } else if (c === 38 && codes[i+1] === 5 && i + 2 < codes.length) {
+        // 256 色近似：前 16 色映射，其它保留为较亮灰色，避免破坏显示。
+        const n = codes[i+2];
+        state.color = fg[n] || (n >= 232 ? `rgb(${8 + (n-232)*10},${8 + (n-232)*10},${8 + (n-232)*10})` : state.color); i += 2;
+      }
+    }
+    openSpan();
+    last = re.lastIndex;
+  }
+  out += escHtml(text.slice(last));
+  closeSpan();
+  return out;
+}
+
+async function openLogs(name) {
+  _logName = name;
+  _logRaw = '';
+  document.getElementById('log-container-name').textContent = name;
+  document.getElementById('log-modal-body').textContent = '加载中...';
+  document.getElementById('log-overlay').classList.add('open');
+  await reloadLogs();
+}
+
+function closeLogs(e) {
+  if (e && e.target && e.target.id !== 'log-overlay' && !e.target.classList.contains('close-btn')) return;
+  document.getElementById('log-overlay').classList.remove('open');
+}
+
+async function reloadLogs() {
+  if (!_logName) return;
+  const body = document.getElementById('log-modal-body');
+  try {
+    const lines = document.getElementById('log-lines') ? document.getElementById('log-lines').value : '500';
+    if (_logName === '__yunzai__') {
+      yunzaiLog.modal.lines = Number(lines) || 500;
+      const beforeFirst = yunzaiLog.modal.first;
+      await fetchYunzaiLog(yunzaiLog.modal, {forceTail: beforeFirst, append: !beforeFirst});
+      _logRaw = yunzaiLog.modal.raw || '';
+      return;
+    }
+
+    const res = await fetch('/api/docker/logs?name=' + encodeURIComponent(_logName) + '&lines=' + encodeURIComponent(lines));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'unknown error');
+    _logRaw = data.logs || '';
+    renderLogs();
+    body.scrollTop = body.scrollHeight;
+  } catch (err) {
+    body.textContent = '❌ 加载日志失败: ' + err.message;
+  }
+}
+
+
+function renderLogs() {
+  const body = document.getElementById('log-modal-body');
+  let text = _logRaw || '(空)';
+  const filterEl = document.getElementById('log-search');
+  _logFilter = filterEl ? filterEl.value.trim() : '';
+  if (_logFilter) {
+    const lines = text.split('\n');
+    const needle = _logFilter.toLowerCase();
+    text = lines.filter(line => line.toLowerCase().includes(needle)).join('\n') || '(没有匹配的日志行)';
+  }
+  let html = ansiToHtml(text);
+  if (_logFilter) {
+    const safeNeedle = escHtml(_logFilter).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { html = html.replace(new RegExp(safeNeedle, 'gi'), m => '<mark class="log-hit">' + m + '</mark>'); } catch(e) {}
+  }
+  body.innerHTML = html;
+}
+
+async function copyLog() {
+  const content = _logRaw || document.getElementById('log-modal-body').textContent || '';
+  try {
+    await navigator.clipboard.writeText(content);
+    alert('日志已复制到剪贴板');
+  } catch (e) {
+    alert('复制失败，可手动选择日志文本复制');
+  }
+}
+
+function clearLogView() {
+  document.getElementById('log-modal-body').textContent = '';
+  if (_logName === '__yunzai__') yunzaiLog.modal.raw = '';
+  _logRaw = '';
+}
+
+function downloadLog() {
+  const body = document.getElementById('log-modal-body');
+  const content = _logRaw || body.textContent || '';
+  const blob = new Blob([content], {type: 'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = _logName + '-logs.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function updateClock() {
+  const el = document.getElementById('live-clock');
+  if (el) el.textContent = new Date().toLocaleString('zh-CN');
+}
+
+// Initial load and refresh timers
+loadData();
+setInterval(updateClock, 1000);
+setInterval(() => {
+  if (currentTab === 'docker') loadDocker();
+  else if (currentTab === 'tunnel') loadTunnel();
+  else if (currentTab === 'yunzai') {
+    fetchYunzaiLog(yunzaiLog.preview);
+  }
+  else loadData();
+}, 15000);
+setInterval(() => { if (currentTab === 'yunzai') fetchYunzaiLog(yunzaiLog.preview); }, 5000);
+</script>
+
+<div class="log-overlay" id="log-overlay" onclick="closeLogs(event)">
+  <div class="log-modal" onclick="event.stopPropagation()">
+    <div class="log-modal-header">
+      <h3>📋 容器日志: <span id="log-container-name">-</span></h3>
+      <div class="log-modal-actions">
+        <select id="log-lines" onchange="reloadLogs()">
+          <option value="100">100行</option>
+          <option value="500" selected>500行</option>
+          <option value="1000">1000行</option>
+          <option value="2000">2000行</option>
+        </select>
+        <input id="log-search" placeholder="搜索日志" oninput="renderLogs()">
+        <button class="action-btn" onclick="reloadLogs()">🔄 刷新</button>
+        <button class="action-btn" onclick="copyLog()">复制</button>
+        <button class="action-btn" onclick="clearLogView()">清屏</button>
+        <button class="action-btn" onclick="downloadLog()">⬇ 下载</button>
+        <button class="close-btn" onclick="closeLogs()">✕</button>
+      </div>
+    </div>
+    <div class="log-modal-body" id="log-modal-body">
+      加载中...
+    </div>
+  </div>
+</div>
+</body>
+</html>
